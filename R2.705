@@ -1,0 +1,770 @@
+; |				   |
+; | CRANE CONTROLLER	  Ver. 1.0 |
+; | (c) Pablo Rodriguez. 27 ene 88 |
+; |				   |
+
+MOR		equ	%01011011	;Mask Option Reg.
+PA		equ	0		;port A data
+PB		equ	1		;port B data
+	MUXE	equ	2		;enab. LS257
+	MUXS	equ	5		;selecciona 0-7 8-15
+
+	DSPD	equ	3		;display data
+	DSPC	equ	5		;display clock
+	DSPE	equ	4		;display enable
+	BC1	equ	7		;AY-3-8910 BC1
+	BDIR	equ	6		;AY-3-8910 BDIR
+PC		equ	2		;port C data ( bit's 0-3 )
+DA		equ	4		;port A DDR
+DB		equ	5		;port B DDR
+DC		equ	6		;port C DDR  ( bit's 0-3 )
+TD		equ	8		;timer data reg.
+TC		equ	9		;timer control reg.
+	TIR	equ	7		;timer Interrupt Request bit
+	TIM	equ	6		;timer Interrupt Mask bit
+TDATA0		equ	123		;delay del timer data
+TDATA1		equ	8		;  "	"  subdivisor
+
+; ***** AREA DE RAM *****
+
+		dseg
+		org	$10
+
+; Flag's y varios
+
+WORK		rmb			;byte scrach
+F1		rmb			;flag's
+	CKON_F	equ	0		;reloj activado si/no
+	CNAN_F	equ	1		;anterior fue coin
+	CNTP_F	equ	2		;tope de coin acumuladas
+	STRT_F	equ	3		;start valido
+	CNCT_F	equ	4		;flag de contador contando
+	MUSA_F	equ	5		;rep. canal A
+	MUSB_F	equ	6		;rep. canal B
+	VHOME_F	equ	7		;valida secuencia de home
+F2		rmb			;flag's
+	MUSI_F	equ	0		;musica activada si/no
+	MUSC_F	equ	1		;canal C si/no
+	RELE_F	equ	2		;reles seteados si/no
+	SHOME_F	equ	3		;activa secuencia de home
+	TOUT_F	equ	4		;time out error
+	SUBIN_F	equ	5		;sub interrup. si/no
+
+; Imagenes de I/O
+
+INP0		rmb			;imagen de entradas 0-7
+	TK_I	equ	4		;boton para bajar
+	STRT_I	equ	5		;boton start
+	COIN_I	equ	6		;entrada de coin
+INP8		rmb			;imagen de entradas 8-15
+	FINY_S	equ	2		;home y
+	DWNY_S	equ	3		;tope inferior y
+	OPCION1	equ	6		;opcion de auto-bajar
+	OPCION2	equ	7		;opcion de continuar
+PSG00		rmb			;fino	a
+PSG01		rmb			;grueso	a
+PSG02		rmb			;fino	b
+PSG03		rmb			;grueso	b
+PSG04		rmb			;fino	c
+PSG05		rmb			;grueso	c
+PSG06		rmb			;ruido
+PSG07		rmb			;control
+	ENA	equ	0		;enab. canal a
+	ENB	equ	1		;enab. canal b
+	ENC	equ	2		;enab. canal c
+PSG08		rmb			;nivel	a
+PSG09		rmb			;nivel	b
+PSG10		rmb			;nivel	c
+PSG11		rmb			;fino    envolvente
+PSG12		rmb			;grueso  envolvente
+PSG13		rmb			;control envolvente
+PSG14		rmb			;port a salidas 0-7
+	COIL_O	equ	4		;bobina gancho	
+	CNCT_O	equ	5		;contador
+PSG15		rmb			;port b salidas 8-15
+	STLP_O	equ	1		;start lamp
+
+; Timer y clock
+
+TM1		rmb			;subdivisor
+SUB0C		rmb			;	"
+SUB1C		rmb			;	"
+SUB2C		rmb			;	"
+SUB30C		rmb			;	"
+SUB31C		rmb			;	"
+SUB32C		rmb			;	"
+	MTDLY	equ	4		;bit testeado
+CK_BCD		rmb			;clock decenas, unidades
+CK_S		rmb			;opcion de tiempo
+
+; Coin, coin counter
+
+CN_BCD		rmb			;coin decenas, unidades
+CNTP_D		rmb			;# de coin's acumuladas
+CNTP_S		rmb			;opcion de acumulacion
+CNPJ_S		rmb			;opcion de fichas por juego
+CNCT_D		rmb			;acumulador del coin couter
+
+; Manejo motor
+
+NDIR		rmb			;nueva direccion de los motores
+LDIR		rmb			;ultima direccion de los motores
+TOUT0_C		rmb			;delay del home timeout
+TOUT1_C		rmb			;delay del home timeout
+
+; Musica
+
+MUSA_C		rmb			;contador de duracion canal A
+MUSA_R		rmb			;    "	     repeticion "   "
+MUSA_P		rmb			;puntero partitura canal A
+MUSB_C		rmb			;contador de duracion canal B
+MUSB_R		rmb			;    "	     repeticion "   "
+MUSB_P		rmb			;puntero partitura canal B
+MUSC_C		rmb			;contador de duracion canal C
+MUSC_P		rmb			;puntero partitura canal C
+
+; ***** AREA DE EPROM *****
+
+	cseg
+	org	$80
+
+; SECTOR DE TABLAS
+; Tabla de topes de acumulacion (valor real-1)
+
+CNTP_T	rmb	0,1,2,3
+
+; Tabla de tiempos por coin
+
+		;1   2   3   4	 coin's
+CK_T	rmb	$05,$10,$15,$20	;opcion 1
+	rmb	$08,$16,$24,$32	;opcion 2
+	rmb	$10,$20,$30,$40	;opcion 3
+	rmb	$15,$30,$60,$75	;opcion 4
+
+; Tabla de direccion de motores
+;	      Reles| |Transistores
+;		YZX| |YZX		UDLR
+MT_T	rmb	%00000111	;0	0000  invalido
+	rmb	%00000111	;1	0001	"
+	rmb	%00000111	;2	0010	"
+	rmb	%00000111	;3	0011	"
+	rmb	%00000111	;4	0100	"
+	rmb	%10000100	;5	0101  ^<
+	rmb	%11000100	;6	0110  ^>
+	rmb	%10000101	;7	0111  ^
+	rmb	%00000111	;8	1000  invalido
+	rmb	%00000100	;9	1001  V<
+	rmb	%01000100	;A	1010  V>
+	rmb	%00000101	;B	1011  V
+	rmb	%00000111	;C	1100  invalido
+	rmb	%00000110	;D	1101  <
+	rmb	%01000110	;E	1110  >
+	rmb	%00000111	;F	1111  motor off
+        rmb	%10000011	;10	gancho abajo  ZX stop
+	rmb	%00000011	;11	gancho arriba ZX stop
+
+; Tabla de indireccion del home
+					;ZX
+HOME_T	rmb	$0F			;00 todo off
+	rmb	$0D			;01 <
+	rmb	$0B			;10 V
+	rmb	$09			;11 V<
+
+; SECTOR DE INICIALIZACION
+; Puertos
+
+RST	lda	#%00111100		;b7,6 AY-3-8910 ,b5-2 mux y dsp
+	sta	PB			;predefine PB, todo dis.
+	lda	#$FC
+	sta	DB			;PB7-2 output, PB1,0 input
+	clr	A
+	sta	DA			;PA input
+	sta	DC			;PC input
+
+; Ram en 00
+
+	ldx	#$10			;set comienzo
+RAM00	clr	^			;borra
+	inc	X			;siguiente
+	cpx	#$80			;termino
+	bne	RAM00			;repite
+
+; Puertos del PSG y driver's
+
+	com	PSG07			;IOA,IOB en out ($FF)
+	lda	#%00111111		;dis. todo
+	sta	PSG14			;presetea
+	bset	2,PSG15			;primera juego luces
+	lda	#11			;volumen
+	sta	PSG08			;canal a
+	sta	PSG09			;canal b
+	sta	PSG10			;canal c
+
+; Afg's
+
+	com	SUB30C			;dis. af2
+	com	SUB31C			;dis. af3
+	com	SUB32C			;dis. af4
+
+; OPCIONES DE DIP SWITCH
+
+	lda	PC			;carga opciones
+	com	A			;invierte
+	and	#3			;solo b1,0
+	sta	CNTP_S			;salva tope acumuladas
+	lda	PC			;carga opciones
+	com	A			;invierte
+	and	#%00001100		;solo b3,2
+	sta	CK_S			;salva opcion tiempos
+
+	lda	PB			;carga puerto
+	com	A			;invierte
+	and	#3			;solo opcion fichas por juego
+	inc	A			;de 0-3 a 1-4
+	sta	CNPJ_S			;salva opcion
+
+; Sub timer y timer
+
+	bset	SUBIN_F,F2		;enab. sub interrup.
+	lda	#TDATA1
+	sta	TM1			;subdivisor interrup.
+	lda	#TDATA0
+	sta	TD			;carga timer
+	bclr	TIM,TC			;enab. timer interrupt
+	cli				;enab. interrup.
+
+; ***** SECTOR DE MAIN *****
+
+	jsr	HOME			;activa secuencia de home
+TRAP0	brset	CNTP_F,F1,TRAP1		;va a buscar mas coin's ?
+	lda	CN_BCD			;carga coin's
+	cmp	CNPJ_S			;compara con las necesarias
+	bhs	CNGET			;acredita coin
+TRAP1	brclr	STRT_F,F1,TRAP0		;no puede start
+	brset	STRT_I,INP0,TRAP0	;start? NO, salta
+	bclr	STRT_F,F1		;	SI, al juego, reset start
+	bclr	CNTP_F,F1		;reset tope
+	clr	CNTP_D			;0 --> coins acumuladas
+	bclr	ENA,PSG07		;enab. a
+	bclr	ENB,PSG07		;enab. b
+	bset	MUSI_F,F2		;activa musica
+	bset	CKON_F,F1		;activa reloj
+	bra	JUEGO			;salta al juego
+
+CNGET	sei				;dis. iterrup.
+	bset	STRT_F,F1		;enab. start
+	ldx	#CN_BCD			;x^ = coin's
+
+	lda	CNPJ_S			;carga fichas por juego
+	sta	WORK			;carga contador
+CNGET2	jsr	BCDDEC			;decrementa coins
+	dec	WORK			;decrementa contador
+	bne	CNGET2			;falta ,salta
+
+	lda	CNTP_D			;primero carga # de coin (2 bit's)
+	inc	CNTP_D			;despues incrementa acumuladas
+	cmp	CNTP_S			;menor que opcion tope acum.
+	blo	CNGET1			;SI, salta
+	bset	CNTP_F,F1		;NO, set tope
+CNGET1	ora	CK_S			;b3,2 opcion (CK_S), b1,0 # de acum.(A)
+	tax				;offset --> X
+	lda	^CK_T			;segundos --> acc.
+	sta	CK_BCD			;al reloj
+	cli				;enab. interrup.
+	bra	TRAP1			;retorna a trap
+
+; Comienzo del juego
+
+JUEGO	brclr	CKON_F,F1,TIMEOUT	;si time-out salta
+	brclr	TK_I,INP0,GANCHO	;boton bajar apr. salta
+	lda	INP0			;carga
+	and	#$0F			;solo stick
+	sta	NDIR			;set direc.
+	bra	JUEGO			;continua
+
+TIMEOUT	brset	OPCION1,INP8,TERMINO	;NO auto-bajar salta
+GANCHO	brset	VHOME_F,F1,CONT		;si home no deja bajar
+
+	lda	#$10			;gancho abajo ZX stop
+	sta	NDIR			;set direc.
+	clr	TOUT1_C			;reset alarma
+	bclr	TOUT_F,F2		;dispara alarma
+GANCHO1	brset	TOUT_F,F2,TOUTERR	;error, salta
+	brset	DWNY_S,INP8,GANCHO1	;espera detectar tope inferior
+	bclr	COIL_O,PSG14		;cierra gancho
+
+	lda	#$11			;gancho arriba ZX stop
+	sta	NDIR			;set direc.
+	clr	TOUT1_C			;reset alarma
+	bclr	TOUT_F,F2		;dispara alarma
+GANCHO2	brset	TOUT_F,F2,TOUTERR	;error, salta
+	brset	FINY_S,INP8,GANCHO2	;espera detectar tope superior
+
+TERMINO	bsr	HOME			;activa secuencia de home
+
+CONT	brclr	OPCION2,INP8,JUEGO	;SI opcion de continuar, salta
+	bclr	MUSI_F,F2		;apaga musica
+	bclr	CKON_F,F1		;apaga reloj
+	clr	CK_BCD			;borra tiempo remanente
+EXIT	jmp	TRAP0
+
+; HOME y EHOME Error en la secuencia de home
+
+HOME	bset	SHOME_F,F2		;activa secuencia de home
+	clr	TOUT1_C			;reset alarma
+	bclr	TOUT_F,F2		;dispara alarma
+HOME1	brset	TOUT_F,F2,TOUTERR	;error en home, salta
+	brclr	VHOME_F,F1,HOME1	;no es home repite
+	bclr	SHOME_F,F2		;desactiva secuencia de home
+	bset	COIL_O,PSG14		;abre gancho
+	rts
+TOUTERR	bclr	SUBIN_F,F2		;dis. sub interrup.
+	bclr	SHOME_F,F2		;desactiva secuencia de home
+	bclr	CKON_F,F1		;dis. reloj
+	bclr	MUSI_F,F2		;dis. musica
+	bset	ENA,PSG07		;dis. canal a
+	bset	ENB,PSG07		;dis. canal b
+	bset	COIL_O,PSG14		;coil off
+	clr	PSG15			;todo off
+	clr	PSG05			;set frec grueso
+	inc	PSG05			;set frec grueso
+EHOME1	lda	TM1			;carga subdivisor
+	and	#$80			;solo bit 7
+	sta	PSG04			;set frec fino
+	bclr	ENC,PSG07		;enab. canal c
+	bra	EHOME1			;loop
+
+; SECTOR DE RUTINAS
+; BCDINC Incrementa el byte apuntado por X y actualiza carry
+
+BCDINC	inc	^
+	lda	^			;carga num
+	and	#$0F			;1er nibble
+	cmp	#9			;es bcd ?
+	bhi	BCDINC0
+	clc
+	rts				;SI
+BCDINC0	lda	^			;NO
+	add	#6			;corrige
+	cmp	#$99
+	bhi	BCDINC1
+	sta	^			;salva
+	clc
+	rts
+BCDINC1	clr	^
+	sec
+	rts
+
+; BCDDEC 	Decrementa el byte apuntado por X y actualiza el carry
+
+BCDDEC	tst	^			;es 00 ?
+	beq	BCDDEC1			;SI
+	lda	^
+	bit	#$0F			;es X0 ?
+	bne	BCDDEC0			;NO
+	sub	#6			;SI, corrige
+BCDDEC0	dec	A			;decrementa
+	sta	^			;salva
+	clc
+	rts
+BCDDEC1	lda	#$99
+	sta	^			;contador = 99
+	sec
+	rts
+
+; TXBY	Transmite un byte al DSP controller
+
+TXBY	lda	#8			;carga contador repeticiones
+TXBY1	bclr	DSPD,PB			;0 --> dato
+	rol	X			;
+	bcc	TXBY2			;carry = 0
+	bset	DSPD,PB			;1 --> dato
+TXBY2	bclr	DSPC,PB
+	bset	DSPC,PB			;latchea el dato
+	dec	A			;contador
+	bne	TXBY1			;siguiente
+	rts
+
+; NOTA desarma el codigo de nota
+
+NOTA	sta	WORK			;salva codigo
+	rol	A
+	rol	A
+	rol	A			;duracion b7,6 --> b1,0 thru carry
+	and	#3			;filtra resto
+	tax				;x = ^duracion
+	lda	^NOTD_T			;A =  duracion
+	bclr	7,WORK
+	bclr	6,WORK			;filtran duracion
+	ldx	WORK			;x = ^nota
+	rts
+
+; TMIN  timer interrupt (Main)
+
+TMIN	bclr	MUXS,PB			;sele. entradas 0-7
+	bclr	MUXE,PB			;enab. LS257
+	lda	PA			;bus  --> acc.
+	sta	INP0			;acc. --> imagen 0-7
+	bset	MUXS,PB			;sele. entradas 8-15
+	lda	PA			;bus  --> acc.
+	sta	INP8			;acc. --> imagen 8-15
+	bset	MUXE,PB			;dis. LS257
+
+; Deteccion y secuencia de HOME
+
+	bset	VHOME_F,F1		;set home valido
+	and	#3			;solo fin ZX
+	beq	SHOME1			;es home termina
+	bclr	VHOME_F,F1		;NO es home, reset
+SHOME1	brclr	SHOME_F,F2,COIN		;secuencia?, NO termina
+	tax				;indireccion al X
+	lda	^HOME_T			;carga direccion
+	sta	NDIR			;set direc.
+
+; Deteccion del coin
+
+COIN	brset	COIN_I,INP0,COIN0	;no hay coin salta
+	brset	CNAN_F,F1,SUBIN		;anterior = coin SI,salta
+	ldx	#CN_BCD			;		NO,x^ coin actual
+	lda	^			;carga
+	cmp	#$99			;cop. con 99 bcd
+	beq	COIN01			;SI, salta y no lo cuenta
+	jsr	BCDINC			;inc. coin
+	inc	CNCT_D			;inc. pendientes coin counter
+	clr	MUSC_P			;reset puntero canal C
+	lda	#1
+	sta	MUSC_C			;reset duracion canal C
+	bclr	ENC,PSG07		;enab canal c
+	bset	MUSC_F,F2		;set sonido de coin
+COIN01	bset	CNAN_F,F1		;setea para siguiente pasada
+	bra	SUBIN
+COIN0	bclr	CNAN_F,F1		;no fue, reset
+
+; Salto a subinterrup.
+
+SUBIN	dec	TM1			;dec subcontador
+	brclr	SUBIN_F,F2,MTDIR0	;subint no enab., salta
+	beq	SUB0			;salta a sub int.
+SUBRET	nop
+
+; Timeout del home
+
+	brset	TOUT_F,F2,TOUTDLY	;inactivo, salta
+	dec	TOUT0_C			;delay
+	bne	MTDIR0			;<>0, salta
+	inc	TOUT1_C			;delay
+	brclr	4,TOUT1_C,MTDIR0	;falta?, salta
+	bset	TOUT_F,F2		;setea error
+	clr	NDIR			;motor off
+TOUTDLY	clr	TOUT1_C			;reset delay
+
+; Seteo de motores
+
+MTDIR0	ldx	NDIR			;carga direccion
+	cpx	LDIR			;comp. con anterior
+	beq	MTDIR1			;es =  set direc.
+	stx	LDIR			;es <> guarda new direc.
+	bclr	RELE_F,F2		;reles deseteado
+	clr	SUB32C			;init delay
+	lda	PSG14			;carga estado actual
+	ora	#7			;motores off, reles =
+	sta	PSG14			;set
+MTDIR1	brset	RELE_F,F2,MTDIR2	;reles seteados?
+	brclr	MTDLY,SUB32C,SETPSG0	;NO, wait end?
+	bset	RELE_F,F2		;reles seteados
+	lda	^MT_T			;
+	and	#$C0			;solo reles
+	sta	WORK			;salva
+	lda	PSG14			;carga estado actual
+	and	#$3F			;borra reles
+	ora	WORK			;nueva config.
+	sta	PSG14			;set
+	clr	SUB32C			;init delay
+MTDIR2	brclr	MTDLY,SUB32C,SETPSG0	;NO, wait end?
+	lda	PSG14			;carga estado actual (con reles)
+	and	#$F8			;borra transistores
+	ora	^MT_T			;nueva config.
+	sta	PSG14			;set
+
+; Seteo de PSG
+
+SETPSG0	lda	#$FF
+	sta	DA			;bus en output
+	clr	X			;init contador
+SETPSG1	stx	PA			;set reg.
+	lda	PB
+	ora	#%11000000		;bdir y bc1 = 1
+	sta	PB			;lachea dato en el psg
+	and	#%00111111		;bdir y bc1 = 0
+	sta	PB
+	lda	^PSG00			;carga dato
+	sta	PA			;dato --> bus
+	bset	BDIR,PB
+	bclr	BDIR,PB			;lachea dato en el psg
+	inc	X			;incrementa contador
+	cpx	#16			;termino?
+	bne	SETPSG1			;NO, salta
+	clr	A
+	sta	DA			;bus en input
+
+; Fin de interrup.
+
+	lda	#TDATA0			;delay --> acc.
+	sta	TD			;carga timer
+	bclr	TIR,TC			;resetea timer interrup.
+	cli				;resetea la interrup.
+	rti
+
+; Timer interrupt (Sub)
+; Clock
+
+SUB0	brclr	CKON_F,F1,SUB01		;reloj activado ?
+	dec	SUB0C			;SI, dec.
+	bne	SUB1			;
+	ldx	#CK_BCD			;NO, X = decenas y segundos
+	jsr	BCDDEC			;decrementa
+	bcc	SUB01			;
+	clr	CK_BCD			;pone en 0
+	bclr	CKON_F,F1		;apaga el reloj
+SUB01	lda	#62			;carga delay
+	sta	SUB0C			;set
+
+; Start lamp
+
+SUB1	dec	SUB1C			;byte para blinck
+	bclr	STLP_O,PSG15		;apaga lampara
+	brclr	STRT_F,F1,SUB2		;no hay start
+	brset	CKON_F,F1,SUB2		;esta jugando
+	brclr	3,SUB1C,SUB2		;blink off
+	bset	STLP_O,PSG15		;prende lampara
+
+; Luces
+
+SUB2	dec	SUB2C			;corre?
+	bne	SUB30			;NO
+	lda	PSG15			;carga imagen de out
+	and	#%00111100		;solo las luces
+	lsl	A			;shiftea
+	and	#%00111100		;borra posible overflow 5 --> 6
+	bne	SUB21			;ovf ? NO, salta
+	lda	#%00000100		;	SI, prende la primera
+SUB21	sta	WORK			;salva la luz
+	lda	PSG15			;carga config. antarior
+	and	#%11000011		;borra luz antarior
+	ora	WORK			;mezcla con las otros out's
+	sta	PSG15			;setea out's
+	lda	#10			;carga delay
+	sta	SUB2C			;set
+
+; Autoflag's del coin counter y otros
+
+SUB30	brset	3,SUB30C,SUB31		;test por el autoflag 2
+	inc	SUB30C			;inc. el contador
+SUB31	brset	4,SUB31C,SUB32		;test por el autoflag 3
+	inc	SUB31C			;inc. el contador
+SUB32	brset	MTDLY,SUB32C,SUB4	;test por el autoflag 4
+	inc	SUB32C			;inc. el contador
+
+; Coin counter
+
+SUB4	brclr	3,SUB30C,SUB5		;contador activado?
+	brclr	4,SUB31C,SUB41		;contador desactivado?
+	tst	CNCT_D			;coin's pendientes
+	beq	SUB5			;NO
+	dec	CNCT_D			;SI, decrementa
+	clr	SUB30C			;activa
+	clr	SUB31C			;activa
+	bclr	CNCT_O,PSG15		;activa contador
+	bra	SUB5			;continua
+SUB41	bset	CNCT_O,PSG15		;reset el driver
+
+; Musica
+
+SUB5	brset	MUSI_F,F2,SUB50		;musica si/no
+	bset	ENA,PSG07		;dis. canal a
+	bset	ENB,PSG07		;dis. canal b
+	clr	MUSA_P			;reset puntero
+	clr	MUSB_P
+	lda	#1
+	sta	MUSA_C			;reset duracion
+	sta	MUSB_C
+	bclr	MUSA_F,F1		;reset fg's
+	bclr	MUSB_F,F1
+	jmp	SUB52			;muy largo para relativo
+
+SUB50	dec	MUSA_C			;decrementa duracion canal B
+	bne	SUB51			;MUS_CB<>0 no modifica
+SUB500	ldx	MUSA_P			;X = puntero partitura
+	inc	MUSA_P			;actualiza puntero
+	lda	^MUSA_T			;carga codigo
+	cmp	#$FE			;es rep.?
+	bne	SUB502			;NO, salta a
+	inc	X				;x^ de rep.
+	brset	MUSA_F,F1,SUB501 	;esta rep. salta
+	lda	^MUSA_T			;carga # de rep.
+	sta	MUSA_R			;init rep.
+	bset	MUSA_F,F1		;set fg rep 
+	bra	SUB503			;
+SUB501	dec	MUSA_R			;dec. rep.
+	bne	SUB503			;termino? NO, salta
+	bclr	MUSA_F,F1		;reset fg rep 
+	inc	X			;x^ saltea
+	inc	X
+	bra	SUB504
+SUB502	cmp	#$FF			;fin tema ?
+	bne	SUB505			;NO, salta
+SUB503	inc	X
+	ldx	^MUSA_T
+SUB504	stx	MUSA_P
+	bra	SUB500			;repite lectura
+SUB505	jsr	NOTA			;desarma codigo
+	sta	MUSA_C			;save nueva duracion
+	lda	^NOTF_T			;carga nota fino
+	sta	PSG00			;set
+	lda	^NOTG_T			;carga nota grueso
+	sta	PSG01			;set
+
+SUB51	dec	MUSB_C			;decrementa duracion canal B
+	bne	SUB52			;MUS_CB<>0 no modifica
+SUB510	ldx	MUSB_P			;X = puntero partitura
+	inc	MUSB_P			;actualiza puntero
+	lda	^MUSB_T			;carga codigo
+	cmp	#$FE			;es rep.?
+	bne	SUB512			;NO, salta a
+	inc	X			;x^ de rep.
+	brset	MUSB_F,F1,SUB511 	;esta rep. salta
+	lda	^MUSB_T			;carga # de rep.
+	sta	MUSB_R			;init rep.
+	bset	MUSB_F,F1		;set fg de rep
+	bra	SUB513			;
+SUB511	dec	MUSB_R			;dec. rep.
+	bne	SUB513			;termino? NO, salta
+	bclr	MUSB_F,F1		;reset fg rep
+	inc	X			;x^ saltea
+	inc	X
+	bra	SUB514
+SUB512	cmp	#$FF			;fin tema ?
+	bne	SUB515			;NO, salta
+SUB513	inc	X
+	ldx	^MUSB_T
+SUB514	stx	MUSB_P
+	bra	SUB510			;repite lectura
+SUB515	jsr	NOTA			;desarma codigo
+	sta	MUSB_C			;save nueva duracion
+	lda	^NOTF_T			;carga nota fino
+	sta	PSG02			;set
+	lda	^NOTG_T			;carga nota grueso
+	sta	PSG03			;set
+
+SUB52	brclr	MUSC_F,F2,SUB6		;si canal C no activado salta
+	dec	MUSC_C			;decrementa duracion canal C
+	bne	SUB6			;MUSC_C<>0 no modifica
+SUB520	ldx	MUSC_P			;X = puntero partitura
+	inc	MUSC_P			;actualiza puntero
+	lda	^MUSC_T			;carga codigo
+	cmp	#$FD			;es rep.?
+	bne	SUB521			;NO, salta a
+	bclr	MUSC_F,F2		;reset flag
+	bset	ENC,PSG07		;dis. canal C
+	bra	SUB6			;termina
+SUB521	jsr	NOTA			;desarma codigo
+	sta	MUSC_C			;save nueva duracion
+	lda	^NOTF_T			;carga nota fino
+	sta	PSG04			;set
+	lda	^NOTG_T			;carga nota grueso
+	sta	PSG05			;set
+
+; Display
+
+SUB6	bclr	DSPE,PB			;chip enable = lo
+	bclr	DSPD,PB			;data = lo
+	lda	#4			;4 puntos dec.
+SUB61	bclr	DSPC,PB
+	bset	DSPC,PB			;clock
+	dec	A
+	bne	SUB61
+	ldx	CN_BCD			;# de coin
+	jsr	TXBY			;tx
+	ldx	CK_BCD			;tiempo
+	jsr	TXBY			;tx
+	bset	DSPE,PB			;chip enable = hi
+
+; Fin de la sub interrup.
+
+	lda	#TDATA1			;subdelay --> acc.
+	sta	TM1			;carga subdivisor
+	jmp	SUBRET			;retorna al main
+
+; Vectores no usados
+
+SWIN		equ	EXIN
+EXIN	cli
+	rti
+
+; Tablas de notas
+		;C   C#  D   D#  E   F
+		;F#  G   G#  A   A#  B
+
+NOTF_T	rmb	$AF,$4F,$F4,$9F,$4E,$02
+	rmb	$BA,$76,$36,$F9,$C0,$8A	;O3
+	rmb	$57,$27,$FA,$CF,$A7,$81
+	rmb	$5D,$3B,$1B,$FC,$E0,$C5	;O4
+	rmb	$AB,$93,$7D,$67,$53,$40
+	rmb	$2E,$1D,$0D,$FE,$F0,$E2	;O5
+	rmb	$D5,$C9,$BE,$B3,$A9,$A0
+	rmb	$97,$8E,$86,$7F,$78,$71	;O6
+
+NOTG_T	rmb	$06,$06,$05,$05,$05,$05
+	rmb	$04,$04,$04,$03,$03,$03	;O3
+	rmb	$03,$03,$02,$02,$02,$02
+	rmb	$02,$02,$02,$01,$01,$01	;O4
+	rmb	$01,$01,$01,$01,$01,$01
+	rmb	$01,$01,$01,$00,$00,$00	;O5
+	rmb	$00,$00,$00,$00,$00,$00
+	rmb	$00,$00,$00,$00,$00,$00	;O6
+
+NOTD_T	rmb	8,16,32,64		;duracion notas
+
+; Partituras
+
+MUSA_T	rmb	$68,$6C,$6F,$6C,$6F,$6C	;E   G#  B   G#  B   G#   O6
+	rmb	$6D,$65,$6D,$65,$68,$65	;A   C#  A   C#  E   C#
+	rmb	$6F,$6C,$68,$6F,$68,$6C	;B   G#  E   B   E   G#
+	rmb	$6D,$65,$68,$65,$68,$6D	;A   C#  E   C#  E   A
+	rmb	$6F,$67,$6A,$6F,$6A,$67	;B   D#  F#  B   F#  D#
+	rmb	$68,$65,$68,$65,$6D,$68	;E   C#  E   C#  A   E
+
+	rmb	$04,$08,$0B,$04,$0B,$04	;E   G#  B   E   B   E	O3
+	rmb	$08,$04,$0B,$04,$08,$0B	;G#  E   B   E   G#  B
+	rmb	$01,$09,$01,$09,$04,$09	;C#  A   C#  A   E   A
+	rmb	$01,$09,$04,$01,$09,$04	;C#  A   E   C#  A   E 
+	rmb	$0B,$08,$0B,$08,$0B,$04	;B   G#  B   G#  B   E
+	rmb	$0B,$04,$08,$0B,$08,$0B	;B   E   G#  B   G#  B
+	rmb	$01,$09,$04,$09,$04,$01	;C#  A   E   A   E   C#
+	rmb	$09,$01,$04,$09,$04,$01	;A   C#  E   A   E   C#
+	rmb	$0B,$03,$06,$03,$06,$03	;B   D#  F#  D#  F#  D#
+	rmb	$0B,$03,$06,$0B,$06,$03	;B   D#  F#  B   F#  D#
+	rmb	$01,$09,$04,$09,$01,$04	;C#  A   E   A   C#  E
+	rmb	$01,$09,$04,$01,$09,$04	;C#  A   E   C#  A   E
+	rmb	$FE,$01,36		;rep 2 seg parte
+	rmb	$FF,$00			;rep todo punteo
+
+MUSB_T	rmb	$90,$90,$90,$95,$95,$95	;E   E   E   A   A   A	O4
+	rmb	$90,$90,$90,$95,$95,$95	;E   E   E   A   A   A
+	rmb	$97,$97,$97,$95,$95,$95	;B   B   B   A   A   A
+	rmb	$FE,$01,$00		;rep 2 prim parte
+
+	rmb	$68,$6C,$6F,$6C,$6F,$6C	;E   G#  B   G#  B   G#	O6
+	rmb	$6D,$65,$6D,$65,$68,$65	;A   C#  A   C#  E   C#
+	rmb	$6F,$6C,$68,$6F,$68,$6C	;B   G#  E   B   E   G#
+	rmb	$6D,$65,$68,$65,$68,$6D	;A   C#  E   C#  E   A
+	rmb	$6F,$67,$6A,$6F,$6A,$67	;B   D#  F#  B   F#  D#
+	rmb	$68,$65,$68,$65,$6D,$68	;E   C#  E   C#  A   E
+	rmb	$FF,$00			;rep toda la base 
+
+MUSC_T	rmb	$04,$05,$04,$07,$04,$02
+	rmb	$FD			;termina
+
+	END
+
+

@@ -1,0 +1,66 @@
+
+MICROLAB				                          T.E: 771-8828
+CONTROLADOR DE CRANE
+
+CONECTOR DE 22				CONECTOR DE 28
+
+1 :	AL PIN 6 DEL DISPLAY (MASA)	1 :	MASA
+2 :	MASA				2 :	MASA
+3 :	FIN AVANCE			3 : 	MASA
+4 :	FIN IZQUIERDO			4 :	MASA
+5 :	FIN RETROCESO			5 :	MASA DEL PARLANTE
+6 :	FIN DERECHO			6 :	PARLANTE
+7 :	FIN ASCENSO			7 :	12-14 Vcc
+8 :	FIN DESCENSO			8 :	12-14 Vcc
+9 :					9 :
+10:					10:
+11:					11:	MOTOR X (IZQUIERDA
+12:	FICHERO				12:	MOTOR X  - DERECHA)
+13:	ARRANQUE DEL JUEGO		13:	MOTOR Z (AVANCE -
+14:	BAJAR GANCHO			14:	MOTOR Z  RETROCESO)
+15:	COMANDO IZQUIERDA		15:	MOTOR Y (ASCENSO -
+16:	COMANDO AVANCE			16:	MOTOR Y  DESCENSO)
+17:	COMANDO DERECHA			17:	BOBINA GANCHO
+18:	COMANDO RETROCESO		18:	BOBINA GANCHO
+19:	AL PIN 2 DEL DISPLAY (5 Vcc)	19:	CONTADOR FICHAS
+20:	AL PIN 3 DEL DISPLAY		20:
+21:	AL PIN 4 DEL DISPLAY		21:	LAMPARA BOTON DE ARRANQUE
+22:	AL PIN 5 DEL DISPLAY		22:	RELE X
+					23:	RELE Z-Y
+CONECTOR DEL DISPLAY			24:	LUZ 0
+					25:	LUZ 1
+1:	MASA				26:	LUZ 2
+2:	AL PIN 19 DEL CONECTOR DE 22	27:	LUZ 3
+3:	AL PIN 20 DEL CONECTOR DE 22	28:
+4:	AL PIN 21 DEL CONECTOR DE 22
+5:	AL PIN 22 DEL CONECTOR DE 22
+6:	AL PIN  1 DEL CONECTOR DE 22 (MASA)
+
+
+
+PROGAMACION DEL DIP SWITCH
+
+1   2  |3   4  |5   6  |7  |8  |
+-------+-------+-------+---+---+--------------------------------------------
+off off|       |       |   |   | 1  Juego		CANTIDAD MAXIMA DE
+on  off|       |       |   |   | 2  Juegos              JUEGOS ACUMULADOS
+off on |       |       |   |   | 3  Juegos
+on  on |       |       |   |   | 4  Juegos
+-------+-------+-------+---+---+--------------------------------------------
+       |off off|       |   |   | 5  Segundos		TIEMPO POR CADA
+       |on  off|       |   |   | 8  Segundos            JUEGO
+       |off on |       |   |   | 10 Segundos
+       |on  on |       |   |   | 15 Segundos
+-------+-------+-------+---+---+--------------------------------------------
+       |       |off off|   |   | 1  Ficha               CANTIDAD DE FICHAS
+       |       |on  off|   |   | 2  Fichas		POR CADA JUEGO
+       |       |off on |   |   | 3  Fichas
+       |       |on  on |   |   | 4  Fichas
+-------+-------+-------+---+---+--------------------------------------------
+       |       |       |off|   | NO   Continua despues de bajar el gancho
+       |       |       |on |   | SI   Continua despues de bajar el gancho
+-------|-------+-------+---+---+--------------------------------------------
+       |       |       |   |off| NO   Baja el gancho al terminar el tiempo
+       |       |       |   |on | SI   Baja el gancho al terminar el tiempo
+----------------------------------------------------------------------------
+

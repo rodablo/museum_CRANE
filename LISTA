@@ -1,0 +1,43 @@
+RESISTENCIAS
+
+8	47	ohm	1/8 watt
+16	100	ohm	1/8 watt
+4	1200 	ohm	1/8 watt
+31	4700	ohm	1/8 watt
+
+1	500	ohm		PRESET
+
+CAPACITORES
+
+1	47  	pF		plate
+1       22  	nF      	plate
+4	.1  	mF	50v	ceramicos
+1	1   	mF	16v	electrolitico	axial  (Towa)
+2	10  	mF	16v	electrolitico	radial (Towa)
+1	47  	mF	16v	electrolitico	radial (Towa)
+1	220 	mF	25v     electrolitico	axial  (Towa)
+
+IC's
+
+1	MC68705P3		Microcontrolador	
+1	MC14499			Display Controler
+2	74257	(o 74LS257)
+2	ULM2003A
+1	C1181H	(o C1182H)	Amplificador de audio
+1	7805			Regulador fijo 5 v TO 220
+4	TDSR5160		Display 7 seg. catodo comun .5" 
+
+1	TIP122
+4	TIP140
+4	BC548
+4	1N4007
+
+VARIOS
+
+1	Dipswitch	8    llaves
+1	Cristal		3.58 Mhz
+1	Zocalo		28   Pin
+1	Disipador	TO 220
+
+
+
